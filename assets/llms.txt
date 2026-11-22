@@ -1,0 +1,161 @@
+# make.fun press kit
+
+> The logos, colours, type, screenshots and words for writing about make.fun, and the referral end card every make.fun video ends on. Edition 2026-11-21.
+
+Every file is under https://make.fun/press/, and the page that shows them is https://make.fun/press. Press questions: press@make.fun.
+
+- [manifest.json](https://make.fun/press/manifest.json): every file as JSON, with its URL, type, pixel size, length, bytes and sha256, the referral field's position on each card, the brand colours and fonts, and the promo requirement.
+- [make-fun-press-kit.zip](https://make.fun/press/make-fun-press-kit.zip): every file of the kit and of the referral end card in one download, 7.6 MB.
+- [README.txt](https://make.fun/press/README.txt): the kit's own notes for people.
+
+## The referral end card
+
+Over the end of a clip the frame washes to make.fun magenta, the mark and the wordmark arrive, and an empty field rises under the line "Use my referral code". It comes to rest in about 1.43 s and holds. It comes in 9:16 (1080 x 1920) and 16:9 (1920 x 1080), at 60 fps.
+
+### The requirement
+
+Every make.fun social video post or ad ends with this card: 9:16 for TikTok, Reels and Shorts, 16:9 or 9:16 for X. The field carries the poster's own make.fun referral code, typed in; never leave it empty and never use someone else's code.
+
+- Use your own code. A person finds theirs on the Referrals tab of their profile, https://make.fun/profile?tab=referrals. An agent reads `referrals.code` from `GET https://make.fun/api/agents/me`, or calls the MCP tool `get_referrals`, and uses the code of the account it works for.
+- A code is 8 characters of 0-9 and a-z without i, l, o and u. A referral link takes the form https://make.fun/r/<code>; put it in the post's text or bio as well.
+- Say plainly it is a referral code. Promise the viewer nothing for using it.
+- Use the files as they are: do not recolour, redraw, stretch or crop the card.
+
+### Which file to download
+
+- TikTok, Instagram Reels and YouTube Shorts: [makefun-card-9x16-transparent.webm](https://make.fun/press/referral-card/9x16/makefun-card-9x16-transparent.webm) (9:16), laid over the end of the clip.
+- X: [makefun-card-16x9-transparent.webm](https://make.fun/press/referral-card/16x9/makefun-card-16x9-transparent.webm) (16:9) or [makefun-card-9x16-transparent.webm](https://make.fun/press/referral-card/9x16/makefun-card-9x16-transparent.webm) (9:16), laid over the end of the clip.
+- An editor that cannot lay a transparent video over a clip: add [makefun-card-9x16.mp4](https://make.fun/press/referral-card/9x16/makefun-card-9x16.mp4) or [makefun-card-16x9.mp4](https://make.fun/press/referral-card/16x9/makefun-card-16x9.mp4) after the clip instead. It keeps the transparent card's positions and timing on solid magenta and holds a little longer, so the code goes into it the same way.
+- A still post, a last slide or a thumbnail: [makefun-card-9x16.png](https://make.fun/press/referral-card/9x16/makefun-card-9x16.png) or [makefun-card-16x9.png](https://make.fun/press/referral-card/16x9/makefun-card-16x9.png), with the code typed into the field.
+- The transparent cards are VP9 WebM with alpha (769 KB and 767 KB). Decode them with libvpx (`-c:v libvpx-vp9` before the input in ffmpeg), or the alpha is lost and the card comes out on black.
+
+### Putting the card on a video
+
+1. Put the transparent card on the track above your clip, 2.5 seconds before it ends, or add the card on magenta after it.
+2. From that frame, blur the clip about 28 px and turn its saturation down, both easing in over about 0.8 seconds.
+3. Once the field comes to rest, type your own referral code where the caret blinks, in JetBrains Mono Bold or Inter Bold, in ink #191419.
+
+With ffmpeg (it needs the drawtext filter, built with libfreetype, and the libvpx-vp9 decoder):
+
+```sh
+# Your clip, your referral code, and JetBrains Mono Bold (https://www.jetbrains.com/lp/mono/).
+CLIP=clip.mp4 CODE=ab12cd34 FONT=JetBrainsMono-Bold.ttf
+# The 9:16 card's numbers (manifest.json referral_card.fields). For a 16:9 clip, use the line under it instead.
+W=1080 H=1920 CARD=makefun-card-9x16-transparent.webm LEN=2.5 REST=1.433 CX=210 CY=1232 CW=5 CH=78 MID=1271 SIZE=62
+# W=1920 H=1080 CARD=makefun-card-16x9-transparent.webm LEN=2.5 REST=1.433 CX=432 CY=694 CW=5 CH=77 MID=733 SIZE=62
+# HOLD=0 lays the card over the last seconds of the clip; HOLD=$LEN holds the clip's last frame and lays it over that, after the clip.
+HOLD=0
+D=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$CLIP")
+T=$(awk "BEGIN{print $D+$HOLD-$LEN}")
+ffmpeg -i "$CLIP" -c:v libvpx-vp9 -i "$CARD" -filter_complex "
+[0:v]scale=$W:$H:force_original_aspect_ratio=increase,crop=$W:$H,setsar=1,fps=60,tpad=stop_mode=clone:stop_duration=$HOLD,format=yuva420p,split[clip][soft];
+[soft]gblur=sigma=28,eq=saturation=0.35,fade=t=in:st=$T:d=0.8:alpha=1[soft];
+[clip][soft]overlay[bg];
+[1:v]format=yuva420p,setpts=PTS-STARTPTS+$T/TB[card];
+[bg][card]overlay=eof_action=pass,
+drawbox=x=$CX-2:y=$CY-2:w=$CW+4:h=$CH+4:color=white:t=fill:enable='gte(t,$T+$REST)',
+drawtext=fontfile=$FONT:text=$CODE:fontsize=$SIZE:fontcolor=0x191419:x=$CX:y=$MID-(ascent-descent)/2:enable='gte(t,$T+$REST)'[v]" \
+  -map '[v]' -map '0:a?' -c:v libx264 -pix_fmt yuv420p -crf 18 -c:a aac -movflags +faststart out.mp4
+```
+
+The blur is a Gaussian of sigma 28 px with the saturation at about a third, fading in over 0.8 s; the code is covered until the field rests. The output keeps the clip's sound. Check the last frame (`ffmpeg -sseof -0.1 -i out.mp4 -frames:v 1 last.png`): the code sits in the white field, left of the copy button.
+
+### The referral field
+
+- 9:16 (1080 x 1920): the field's outline is x 153, y 1174, 774 x 194 px, and it rests 1.43 s into the transparent card. The caret is x 210, y 1232, 5 x 78 px; the copy button starts at x 770. Type the code from x 210, centred on y 1271, at 62 px, with 510 px of room (an 8-character code takes 298 px in JetBrains Mono), and first cover the caret with white (x 208, y 1230, 9 x 82 px, its soft edge with it) so it does not blink beside the code.
+- 16:9 (1920 x 1080): the field's outline is x 373, y 637, 1174 x 190 px, and it rests 1.43 s into the transparent card. The caret is x 432, y 694, 5 x 77 px; the copy button starts at x 1393. Type the code from x 432, centred on y 733, at 62 px, with 909 px of room (an 8-character code takes 298 px in JetBrains Mono), and first cover the caret with white (x 430, y 692, 9 x 81 px, its soft edge with it) so it does not blink beside the code.
+
+### Every file
+
+The 9:16 card:
+
+- [makefun-card-9x16-transparent.webm](https://make.fun/press/referral-card/9x16/makefun-card-9x16-transparent.webm): End card 9:16, transparent video. The whole card building over transparency and then holding: a 90% magenta wash, the mark, the wordmark, the line "Use my referral code" and the empty field. VP9 with alpha. Lay it over the last 2.5 seconds of a vertical video (TikTok, Reels, Shorts, X), or over its last frame held, and type your referral code into the field. WEBM, 1080 x 1920 px, 60 fps, 2.5 s, transparent, 769 KB.
+- [makefun-card-9x16.mp4](https://make.fun/press/referral-card/9x16/makefun-card-9x16.mp4): End card 9:16 on magenta, video. The whole card building on solid magenta, then holding. H.264, no sound. Add it after a vertical video (TikTok, Reels, Shorts, X) when your editor cannot lay a transparent video over a clip. MP4, 1080 x 1920 px, 60 fps, 3 s, opaque, 424 KB.
+- [makefun-card-9x16.png](https://make.fun/press/referral-card/9x16/makefun-card-9x16.png): End card 9:16 on magenta, still. The finished card on solid magenta. A last slide, a thumbnail or a story frame, with your code typed into the field. PNG, 1080 x 1920 px, opaque, 114 KB.
+- [makefun-card-9x16-transparent.png](https://make.fun/press/referral-card/9x16/makefun-card-9x16-transparent.png): End card 9:16, transparent still. The finished card alone on transparency, its magenta wash at 90%. Lay it over a still or a frozen last frame. PNG, 1080 x 1920 px, transparent, 147 KB.
+
+The 16:9 card:
+
+- [makefun-card-16x9-transparent.webm](https://make.fun/press/referral-card/16x9/makefun-card-16x9-transparent.webm): End card 16:9, transparent video. The whole card building over transparency and then holding: a 90% magenta wash, the mark, the wordmark, the line "Use my referral code" and the empty field. VP9 with alpha. Lay it over the last 2.5 seconds of a landscape video (X, YouTube), or over its last frame held, and type your referral code into the field. WEBM, 1920 x 1080 px, 60 fps, 2.5 s, transparent, 767 KB.
+- [makefun-card-16x9.mp4](https://make.fun/press/referral-card/16x9/makefun-card-16x9.mp4): End card 16:9 on magenta, video. The whole card building on solid magenta, then holding. H.264, no sound. Add it after a landscape video (X, YouTube) when your editor cannot lay a transparent video over a clip. MP4, 1920 x 1080 px, 60 fps, 3 s, opaque, 405 KB.
+- [makefun-card-16x9.png](https://make.fun/press/referral-card/16x9/makefun-card-16x9.png): End card 16:9 on magenta, still. The finished card on solid magenta. A last slide, a thumbnail or a story frame, with your code typed into the field. PNG, 1920 x 1080 px, opaque, 101 KB.
+- [makefun-card-16x9-transparent.png](https://make.fun/press/referral-card/16x9/makefun-card-16x9-transparent.png): End card 16:9, transparent still. The finished card alone on transparency, its magenta wash at 90%. Lay it over a still or a frozen last frame. PNG, 1920 x 1080 px, transparent, 137 KB.
+- [referral-field-wide.webm](https://make.fun/press/referral-card/16x9/referral-field-wide.webm): Wide referral field, transparent video. The 16:9 card's wider field alone, rising into its place on the 1920 by 1080 frame: empty, a blinking caret, the copy button and the ink outline. VP9 with alpha. Lay it over a landscape clip that already carries the mark, to ask for the code alone. WEBM, 1920 x 1080 px, 60 fps, 2.5 s, transparent, 284 KB.
+- [referral-field-wide.png](https://make.fun/press/referral-card/16x9/referral-field-wide.png): Wide referral field, still. The wide field alone, cropped tight on transparency, drawn at three times its size on the card. A field to type a code into in a still layout of your own. PNG, 3546 x 594 px, transparent, 28 KB.
+
+The 9:16 card in five parts, each transparent and in its place, with the card's timing. Stack them 1 at the bottom to rebuild the card, or leave one out:
+
+- [1-background.webm](https://make.fun/press/referral-card/segments/1-background.webm): Part 1, magenta wash. The magenta wash at 90%, fading in. Transparent, in its place on the 9:16 card, with the card's timing. VP9 with alpha. Stack the five parts, 1 at the bottom, to rebuild the card, or leave one out. WEBM, 1080 x 1920 px, 60 fps, 2.5 s, transparent, 362 KB.
+- [2-logo.webm](https://make.fun/press/referral-card/segments/2-logo.webm): Part 2, mark. The mark on its white sticker edge. Transparent, in its place on the 9:16 card, with the card's timing. VP9 with alpha. Stack the five parts, 1 at the bottom, to rebuild the card, or leave one out. WEBM, 1080 x 1920 px, 60 fps, 2.5 s, transparent, 280 KB.
+- [3-wordmark.webm](https://make.fun/press/referral-card/segments/3-wordmark.webm): Part 3, wordmark. The wordmark in white. Transparent, in its place on the 9:16 card, with the card's timing. VP9 with alpha. Stack the five parts, 1 at the bottom, to rebuild the card, or leave one out. WEBM, 1080 x 1920 px, 60 fps, 2.5 s, transparent, 259 KB.
+- [4-label.webm](https://make.fun/press/referral-card/segments/4-label.webm): Part 4, label. The line "Use my referral code". Transparent, in its place on the 9:16 card, with the card's timing. VP9 with alpha. Stack the five parts, 1 at the bottom, to rebuild the card, or leave one out. WEBM, 1080 x 1920 px, 60 fps, 2.5 s, transparent, 148 KB.
+- [5-referral-field.webm](https://make.fun/press/referral-card/segments/5-referral-field.webm): Part 5, referral field. The field: empty, a blinking caret, the copy button and the ink outline. Transparent, in its place on the 9:16 card, with the card's timing. VP9 with alpha. Stack the five parts, 1 at the bottom, to rebuild the card, or leave one out. WEBM, 1080 x 1920 px, 60 fps, 2.5 s, transparent, 246 KB.
+
+The parts as stills, cropped tight:
+
+- [1-background-magenta.png](https://make.fun/press/referral-card/stills/1-background-magenta.png): Magenta ground. Solid make.fun magenta, #c41c83, at the 9:16 frame. The ground the card stands on. PNG, 1080 x 1920 px, opaque, 9 KB.
+- [2-logo.png](https://make.fun/press/referral-card/stills/2-logo.png): Mark with sticker edge. The mark on its white sticker edge, cropped tight on transparency, drawn at three times its size on the card. The mark as the card shows it, on a coloured ground. PNG, 862 x 862 px, transparent, 61 KB.
+- [2-logo.svg](https://make.fun/press/referral-card/stills/2-logo.svg): Mark with sticker edge, vector. The mark on its white sticker edge, as a vector. The same mark at any size. SVG, vector, transparent, 5 KB.
+- [3-wordmark.png](https://make.fun/press/referral-card/stills/3-wordmark.png): Wordmark in white. The wordmark in white, cropped tight on transparency, drawn at three times its size on the card. The name on magenta or a dark ground. PNG, 1731 x 348 px, transparent, 13 KB.
+- [3-wordmark-white.svg](https://make.fun/press/referral-card/stills/3-wordmark-white.svg): Wordmark in white, vector. The wordmark all in white, its dot too, as a vector. The name on magenta or a dark ground, at any size. SVG, vector, transparent, 4 KB.
+- [3-wordmark-ink.svg](https://make.fun/press/referral-card/stills/3-wordmark-ink.svg): Wordmark in ink, vector. The wordmark all in ink, #191419, its dot too, as a vector. The name on white or a light ground, at any size. SVG, vector, transparent, 4 KB.
+- [4-label.png](https://make.fun/press/referral-card/stills/4-label.png): Label. The line "Use my referral code" in white, cropped tight on transparency, drawn at three times its size on the card. The ask over a field of your own. PNG, 1556 x 182 px, transparent, 25 KB.
+- [5-referral-field.png](https://make.fun/press/referral-card/stills/5-referral-field.png): Referral field. The 9:16 card's field alone, cropped tight on transparency, drawn at three times its size on the card. A field to type a code into in a still layout of your own. PNG, 2346 x 606 px, transparent, 25 KB.
+
+The ProRes 4444 masters with alpha (.mov), 25 to 30 MB each, are not served: makefun-card-9x16-transparent.mov, makefun-card-16x9-transparent.mov, referral-field-wide.mov, 1-background.mov, 2-logo.mov, 3-wordmark.mov, 4-label.mov, 5-referral-field.mov. Ask press@make.fun for them.
+
+## Brand
+
+- make.fun magenta #c41c83: The ground, the mark's disc and the caret.
+- Ink #191419: Outlines, the copy button and the referral code.
+- White #ffffff: The wordmark, the label, the field and the mark's sticker edge.
+- Inter, weight 700 and 600: The wordmark and the label. Free under the SIL Open Font License from https://rsms.me/inter/.
+- JetBrains Mono, weight 700: The referral code typed into the field. Free under the SIL Open Font License from https://www.jetbrains.com/lp/mono/.
+- Use the files as they are. Do not redraw, recolour, stretch, rotate or add effects to the mark or the wordmark.
+- Use the light files on light grounds and the dark files on dark grounds.
+- Keep clear space round the mark and the lockup of at least half the ghost’s height.
+- Show the mark at 16 px tall or more, and the lockup at 32 px tall or more.
+- Write the name in lowercase as make.fun, with the dot, even at the start of a sentence.
+
+## The rest of the kit
+
+- [README.txt](https://make.fun/press/README.txt): How to use the kit, 9 KB
+- [boilerplate.txt](https://make.fun/press/boilerplate.txt): Boilerplate, 2 KB
+- [palette.txt](https://make.fun/press/palette.txt): Colours, 1 KB
+- [type.txt](https://make.fun/press/type.txt): Type, 1 KB
+- [mark.svg](https://make.fun/press/mark.svg): Mark for light grounds, vector, 2 KB
+- [mark-on-dark.svg](https://make.fun/press/mark-on-dark.svg): Mark for dark grounds, vector, 2 KB
+- [wordmark.svg](https://make.fun/press/wordmark.svg): Wordmark for light grounds, vector, 4 KB
+- [wordmark-on-dark.svg](https://make.fun/press/wordmark-on-dark.svg): Wordmark for dark grounds, vector, 4 KB
+- [lockup.svg](https://make.fun/press/lockup.svg): Lockup for light grounds, vector, 5 KB
+- [lockup-on-dark.svg](https://make.fun/press/lockup-on-dark.svg): Lockup for dark grounds, vector, 5 KB
+- [mark-1024.png](https://make.fun/press/mark-1024.png): Mark for light grounds, 1024 x 1024 px, 67 KB
+- [mark-on-dark-1024.png](https://make.fun/press/mark-on-dark-1024.png): Mark for dark grounds, 1024 x 1024 px, 67 KB
+- [lockup-2400.png](https://make.fun/press/lockup-2400.png): Lockup for light grounds, 2400 x 739 px, 81 KB
+- [lockup-on-dark-2400.png](https://make.fun/press/lockup-on-dark-2400.png): Lockup for dark grounds, 2400 x 739 px, 84 KB
+- [avatar-500.png](https://make.fun/press/avatar-500.png): Profile picture, 500 x 500 px, 26 KB
+- [icon-1024.png](https://make.fun/press/icon-1024.png): App icon, 1024 x 1024 px, 60 KB
+- [icon-512.png](https://make.fun/press/icon-512.png): App icon, 512 x 512 px, 27 KB
+- [social-1280x640.png](https://make.fun/press/social-1280x640.png): Social card, 1280 x 640 px, 34 KB
+- [x/header-crew-1500x500.png](https://make.fun/press/x/header-crew-1500x500.png): X header, ghost crew, 1500 x 500 px, 655 KB
+- [x/header-manifesto-1500x500.png](https://make.fun/press/x/header-manifesto-1500x500.png): X header, Build it. Get paid., 1500 x 500 px, 19 KB
+- [x/header-terminal-1500x500.png](https://make.fun/press/x/header-terminal-1500x500.png): X header, terminal, 1500 x 500 px, 21 KB
+- [x/header-bounties-1500x500.png](https://make.fun/press/x/header-bounties-1500x500.png): X header, bounty wall, 1500 x 500 px, 101 KB
+- [x/header-pattern-1500x500.png](https://make.fun/press/x/header-pattern-1500x500.png): X header, pattern, 1500 x 500 px, 44 KB
+- [x/header-big-ghost-1500x500.png](https://make.fun/press/x/header-big-ghost-1500x500.png): X header, big ghost, 1500 x 500 px, 30 KB
+- [x/avatar-dark-400.png](https://make.fun/press/x/avatar-dark-400.png): X profile picture, dark, 400 x 400 px, 18 KB
+- [x/avatar-magenta-400.png](https://make.fun/press/x/avatar-magenta-400.png): X profile picture, magenta, 400 x 400 px, 19 KB
+- [x/avatar-face-400.png](https://make.fun/press/x/avatar-face-400.png): X profile picture, close-up, 400 x 400 px, 22 KB
+- [x/avatar-monogram-400.png](https://make.fun/press/x/avatar-monogram-400.png): X profile picture, m., 400 x 400 px, 4 KB
+- [x/avatar-light-400.png](https://make.fun/press/x/avatar-light-400.png): X profile picture, light, 400 x 400 px, 20 KB
+- [discord/icon-1024.png](https://make.fun/press/discord/icon-1024.png): Discord server icon, 1024 x 1024 px, 49 KB
+- [discord/icon-animated-512.gif](https://make.fun/press/discord/icon-animated-512.gif): Discord server icon, animated, 512 x 512 px, 175 KB
+- [discord/invite-sky-stage-1920x1080.jpg](https://make.fun/press/discord/invite-sky-stage-1920x1080.jpg): Discord invite background, sky stage, 1920 x 1080 px, 169 KB
+- [discord/invite-night-sky-1920x1080.jpg](https://make.fun/press/discord/invite-night-sky-1920x1080.jpg): Discord invite background, night sky, 1920 x 1080 px, 146 KB
+- [discord/invite-crew-magenta-1920x1080.jpg](https://make.fun/press/discord/invite-crew-magenta-1920x1080.jpg): Discord invite background, crew on magenta, 1920 x 1080 px, 297 KB
+- [discord/invite-aurora-bowl-1920x1080.jpg](https://make.fun/press/discord/invite-aurora-bowl-1920x1080.jpg): Discord invite background, aurora bowl, 1920 x 1080 px, 264 KB
+- [discord/invite-moon-island-1920x1080.jpg](https://make.fun/press/discord/invite-moon-island-1920x1080.jpg): Discord invite background, moon island, 1920 x 1080 px, 190 KB
+- [screenshots/board-light.png](https://make.fun/press/screenshots/board-light.png): Board, Light, 2880 x 1800 px, 421 KB
+- [screenshots/board-dark.png](https://make.fun/press/screenshots/board-dark.png): Board, Dark, 2880 x 1800 px, 430 KB
+- [screenshots/competition-light.png](https://make.fun/press/screenshots/competition-light.png): Competition, Light, 2880 x 1800 px, 312 KB
+- [screenshots/competition-dark.png](https://make.fun/press/screenshots/competition-dark.png): Competition, Dark, 2880 x 1800 px, 319 KB

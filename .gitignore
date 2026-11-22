@@ -1,0 +1,13 @@
+__pycache__/
+frames/
+frames-v2/
+frames-v3/
+clip.mp4
+clip-v2.mp4
+clip-v3.mp4
+audio.wav
+audio-v2.wav
+audio-v3.wav
+check-*.png
+check-v2-*.png
+check-v3-*.png
